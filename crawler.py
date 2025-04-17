@@ -2,9 +2,11 @@
 
 import requests
 import json
+import re
 from bs4 import BeautifulSoup
 from tqdm import tqdm
 from typing import List
+from urllib.parse import urljoin, urlparse
 
 
 def get_request(url: str) -> requests.Response:
@@ -153,7 +155,76 @@ def crawl_festivals_from_festival_ticker() -> List[dict]:
     return events_updated
 
 
+def find_line_up_link_for_a_single_festival(festival: dict) -> str:
+    """Get the link to the festival's line up page. Defaults to homepage.
+
+    Args:
+        festival (dict): festival to find the link for
+
+    Returns:
+        str: url
+
+    """
+
+    def get_absolute_link(base: str, a: str):
+        parsed_url = urlparse(a)
+        if parsed_url.scheme == "https" or parsed_url.scheme == "http":
+            return a
+        else:
+            return urljoin(base, a)
+
+    slug_attempts = ["line-up", "bands", "lineup"]
+    base_url = festival["url"]
+
+    # try urls as good-luck-guesses
+    for slug in slug_attempts:
+        url = urljoin(base_url, slug)
+        response = requests.get(url)
+        if response.status_code == 200:
+            return url
+
+    response = get_request(base_url)
+    soup = BeautifulSoup(response.content, "html.parser")
+
+    # find slug in href of anchor tags that match the slug
+    for slug in slug_attempts:
+        pattern = re.compile(f"(.|\n)*{slug}(.|\n)*", flags=re.IGNORECASE)
+        anchor_tags = soup.find_all("a", href=True, string=pattern)
+        for a in anchor_tags:
+            if pattern.match(a["href"]):
+                return get_absolute_link(base_url, a["href"])
+
+    # find slug in text of anchor tag
+    for slug in slug_attempts:
+        pattern = re.compile(f"(.|\n)*{slug}(.|\n)*", flags=re.IGNORECASE)
+        anchor_tags = soup.find_all("a", href=True)
+        for a in anchor_tags:
+            if pattern.match(a.text):
+                return get_absolute_link(base_url, a["href"])
+    return base_url
+
+
+def add_line_up_links(events: List[dict]) -> List[dict]:
+    """Add the url to the festival's line up page to festival dict.
+
+    Args:
+        events (List[dict]): all festivals
+
+    Returns:
+        List[dict]: all festivals with the line up link added
+
+    """
+    result = []
+    for event in events:
+        line_up_url = find_line_up_link_for_a_single_festival(event)
+        event["line_up_url"] = line_up_url
+        result.append(event)
+    return result
+
+
 if __name__ == "__main__":
     events = crawl_festivals_from_festival_ticker()
+    events = add_line_up_links(events)
+
     with open("events.json", "w") as f:
         json.dump(events, f)
