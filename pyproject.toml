@@ -1,0 +1,4 @@
+[tool.ruff]
+exclude = ["*.ipynb"]
+lint.select = ["D"]
+lint.ignore = ["D203", "D213"]
