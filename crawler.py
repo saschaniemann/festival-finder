@@ -528,24 +528,19 @@ def get_line_up_from_html(events: List[dict]) -> List[dict]:
 
 if __name__ == "__main__":
     load_dotenv(override=True)
-    # events = crawl_festivals_from_festival_ticker()
-    # with open("events.json", "w") as f:
-    #     json.dump(events, f)
-    # events = add_line_up_links(events)
-    # with open("events2.json", "r") as f:
-    #     events = json.load(f)
-    # events = get_html_from_line_up_links(events[:40])
-
-    # with open("events_with_line_up_text.json", "w") as f:
-    #     json.dump(events, f)
-
-    with open("events_with_line_up_text.json", "r") as f:
-        events = json.load(f)
-    events = get_line_up_from_html(events[:40])
+    events = crawl_festivals_from_festival_ticker()
+    with open("events.json", "w") as f:
+        json.dump(events, f)
+    events = add_line_up_links(events)
+    with open("events_with_line_up_links.json", "w") as f:
+        json.dump(events, f)
+    events = get_html_from_line_up_links(events)
+    with open("events_with_html_code.json", "w") as f:
+        json.dump(events, f)
+    events = get_line_up_from_html(events)
     with open("steps/events_with_bands.json", "w") as f:
         json.dump(events, f)
 
-    # TODO: gemini stuff in parallel
     # TODO: clean up code
     # TODO: mac update
 
