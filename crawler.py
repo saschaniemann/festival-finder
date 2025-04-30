@@ -3,10 +3,32 @@
 import requests
 import json
 import re
+import os
+import time
+import concurrent.futures
 from bs4 import BeautifulSoup
 from tqdm import tqdm
-from typing import List
+from tqdm.asyncio import tqdm as tqdm_asyncio
+from typing import List, Tuple, Optional
 from urllib.parse import urljoin, urlparse
+import asyncio
+from playwright.async_api import (
+    async_playwright,
+    Error as PlaywrightError,
+    TimeoutError as PlaywrightTimeoutError,
+)
+import google.generativeai as genai
+from google.generativeai import GenerationConfig
+from google.api_core.exceptions import ResourceExhausted
+from dotenv import load_dotenv
+
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+MAX_CONCURRENT_PAGES = 10
+MAX_CONCURRENT_TASKS = 10
+BLOCK_RESOURCE_TYPES = ["image", "stylesheet", "font", "media"]
+MAX_RETRIES = 3
+NAV_TIMEOUT_MS = 30000
+EXTRA_WAIT_MS = 2000
 
 
 def get_request(url: str) -> requests.Response:
@@ -23,6 +45,172 @@ def get_request(url: str) -> requests.Response:
     response.raise_for_status()
 
     return response
+
+
+async def fetch_page_content(
+    browser, url: str, semaphore: asyncio.Semaphore
+) -> Tuple[str, Optional[BeautifulSoup]]:
+    """Fetch a single page using Playwright.
+
+    Args:
+        browser: An active Playwright browser instance.
+        url: The URL to fetch.
+        semaphore: An asyncio.Semaphore to limit concurrency.
+
+    Returns:
+        A tuple: (url, BeautifulSoup object or None if failed).
+
+    """
+    page = None
+    context = None
+    soup = None
+
+    async with semaphore:
+        try:
+            # Create a new isolated browser context for each request
+            context = await browser.new_context(
+                user_agent=USER_AGENT,
+            )
+            page = await context.new_page()
+
+            # --- Block unnecessary resources ---
+            async def handle_route(route):
+                if route.request.resource_type in BLOCK_RESOURCE_TYPES:
+                    try:
+                        await route.abort()
+                    except PlaywrightError as e:
+                        print(
+                            f"Warning: Could not abort request {route.request.url}: {e}"
+                        )
+                else:
+                    await route.continue_()
+
+            await page.route("**/*", handle_route)
+
+            # --- Navigate and wait for domcontentloaded (or timeout) ---
+            try:
+                await page.goto(
+                    url, wait_until="domcontentloaded", timeout=NAV_TIMEOUT_MS
+                )
+            except PlaywrightTimeoutError:
+                print(f"Timeout waiting for domcontentloaded: {url}")
+            except Exception as e:
+                print(f"Navigation error for {url}: {type(e).__name__} - {e}")
+
+            if page:
+                await page.wait_for_timeout(EXTRA_WAIT_MS)
+            else:
+                print(f"Skipping extra wait as page was not created for {url}")
+
+            # --- Get page content ---
+            if page:
+                html_content = await page.content()
+            else:
+                html_content = None
+                print(f"Skipping content retrieval as page was not created for {url}")
+
+            if html_content:
+                soup = BeautifulSoup(html_content, "html.parser")
+            else:
+                print("Got no html content!")
+
+        except PlaywrightError as e:
+            print(f"Playwright setup error for {url}: {e}")
+        except Exception as e:
+            print(
+                f"Unexpected error during fetch process for {url}: {e}", exc_info=True
+            )
+        finally:
+            # --- Cleanup ---
+            if page:
+                try:
+                    await page.close()
+                except Exception as e:
+                    print(f"Error closing page for {url}: {e}")
+            if context:
+                try:
+                    await context.close()
+                except Exception as e:
+                    print(f"Error closing context for {url}: {e}")
+
+            return url, soup
+
+
+async def run_parallel_fetch(
+    urls: List[str],
+) -> List[Tuple[str, Optional[BeautifulSoup]]]:
+    """Fetch multiple URLs in parallel using Playwright, showing progress with tqdm.
+
+    Args:
+        urls: A list of URLs to fetch.
+
+    Returns:
+        A list of tuples: [(url, BeautifulSoup object or None), ...],
+        in the order of completion.
+
+    """
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT_TASKS)
+    print(
+        f"Setting up Playwright and browser (max concurrent tasks: {MAX_CONCURRENT_TASKS})..."
+    )
+
+    async with async_playwright() as p:
+        browser = await p.firefox.launch(headless=True)
+        print(f"Browser launched: {browser.browser_type.name} {browser.version}")
+
+        tasks = [fetch_page_content(browser, url, semaphore) for url in urls]
+
+        print(f"Starting parallel fetch for {len(urls)} URLs...")
+
+        results_in_completion_order = []
+        for future in tqdm_asyncio(
+            asyncio.as_completed(tasks),
+            total=len(urls),
+            desc="Fetching URLs",
+            unit="site",
+        ):
+            try:
+                result = await future
+                results_in_completion_order.append(result)
+            except Exception as e:
+                print(
+                    f"\nError retrieving result from a task future: {e}", exc_info=True
+                )
+
+        print("\nAll fetch tasks completed.")
+        await browser.close()
+        print("Browser closed.")
+
+    return results_in_completion_order
+
+
+def gemini_generate(prompt: str) -> str:
+    """Run Gemini API using the passed prompt.
+
+    Args:
+        prompt (str): prompt to pass to Gemini API
+
+    Returns:
+        str: response. Since structured output is used, this contains json as a string.
+
+    """
+    genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+
+    model = genai.GenerativeModel("gemini-2.0-flash-lite")
+
+    response = None
+    while response is None:
+        try:
+            response = model.generate_content(
+                prompt,
+                generation_config=GenerationConfig(
+                    response_mime_type="application/json"
+                ),
+            )
+        except ResourceExhausted as e:
+            time.sleep(25)
+
+    return response.text
 
 
 def get_festival_list() -> List[dict]:
@@ -106,7 +294,10 @@ def crawl_festival_from_festival_tickers_dedicated_page(url: str):
         if not bands.startswith("Bands:"):
             return []
 
-        bands = bands.split("\n")[1]
+        bands = bands.split("\n")
+        if len(bands) <= 1:
+            return []
+        bands = bands[1]
         bands = bands.split(", ")
         bands[0] = bands[0].strip()  # remove leading whitespaces
         # if 'und weitere': remove it
@@ -145,12 +336,31 @@ def crawl_festivals_from_festival_ticker() -> List[dict]:
     events = get_festival_list()
 
     events_updated = []
-    for event in tqdm(events):
-        info = crawl_festival_from_festival_tickers_dedicated_page(
-            event["festival_ticker_url"]
-        )
-        event.update(info)
-        events_updated.append(event)
+    with tqdm(
+        total=len(events), desc="Scraping info of festival ticker's dedicated pages"
+    ) as pbar:
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            # Start the load operations and mark each future with its URL
+            future_to_url = {
+                executor.submit(
+                    crawl_festival_from_festival_tickers_dedicated_page,
+                    event["festival_ticker_url"],
+                ): event
+                for event in events
+            }
+            for future in concurrent.futures.as_completed(future_to_url):
+                event = future_to_url[future]
+                try:
+                    info = future.result()
+                except Exception as exc:
+                    print(
+                        "%s generated an exception: %s"
+                        % (event["festival_ticker_url"], exc)
+                    )
+                else:
+                    event.update(info)
+                    events_updated.append(event)
+                pbar.update(1)
 
     return events_updated
 
@@ -173,30 +383,36 @@ def find_line_up_link_for_a_single_festival(festival: dict) -> str:
         else:
             return urljoin(base, a)
 
-    slug_attempts = ["line-up", "bands", "lineup"]
+    slug_attempts = ["line-up", "bands", "lineup", "acts", "artists"]
     base_url = festival["url"]
 
     # try urls as good-luck-guesses
     for slug in slug_attempts:
         url = urljoin(base_url, slug)
-        response = requests.get(url)
-        if response.status_code == 200:
-            return url
+        try:
+            response = requests.get(url, timeout=5.0)
+            if response.status_code == 200:
+                return url
+        except:
+            pass
 
-    response = get_request(base_url)
-    soup = BeautifulSoup(response.content, "html.parser")
+    try:
+        response = requests.get(base_url, timeout=10.0)
+        soup = BeautifulSoup(response.content, "html.parser")
+    except:
+        return base_url
 
     # find slug in href of anchor tags that match the slug
     for slug in slug_attempts:
-        pattern = re.compile(f"(.|\n)*{slug}(.|\n)*", flags=re.IGNORECASE)
-        anchor_tags = soup.find_all("a", href=True, string=pattern)
+        pattern = re.compile(f"([^a-zA-Z])*{slug}(.|\n)*", flags=re.IGNORECASE)
+        anchor_tags = soup.find_all("a", href=True)
         for a in anchor_tags:
             if pattern.match(a["href"]):
                 return get_absolute_link(base_url, a["href"])
 
     # find slug in text of anchor tag
     for slug in slug_attempts:
-        pattern = re.compile(f"(.|\n)*{slug}(.|\n)*", flags=re.IGNORECASE)
+        pattern = re.compile(f"([^a-zA-Z])*{slug}(.|\n)*", flags=re.IGNORECASE)
         anchor_tags = soup.find_all("a", href=True)
         for a in anchor_tags:
             if pattern.match(a.text):
@@ -215,16 +431,124 @@ def add_line_up_links(events: List[dict]) -> List[dict]:
 
     """
     result = []
+    total = len(events)
+    last_percents = total * 0.97
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        # Start the load operations and mark each future with its URL
+        future_to_url = {
+            executor.submit(find_line_up_link_for_a_single_festival, event): event
+            for event in events
+        }
+        for future in concurrent.futures.as_completed(future_to_url):
+            event = future_to_url[future]
+            try:
+                line_up_url = future.result()
+            except Exception as exc:
+                print("%s generated an exception: %s" % (event["url"], exc))
+            else:
+                event["line_up_url"] = line_up_url
+                result.append(event)
+                if (current := len(result)) % 50 == 0 or current > last_percents:
+                    print(f"\r{current}/{total}", end="")
+
+    return result
+
+
+def get_html_from_line_up_links(events: List[dict]) -> List[dict]:
+    """Get html code of websites in parallel.
+
+    Args:
+        events (List[dict]): events. "line_up_url" contains the url to fetch.
+
+    Returns:
+        List[dict]: events with "scraped_line_up_html" added
+
+    """
+    line_up_urls = [e["line_up_url"] for e in events]
+
+    results = asyncio.run(run_parallel_fetch(line_up_urls))
+    results_dict = {}
+    for url, soup in results:
+        if soup is None or soup.body is None:
+            results_dict[url] = None
+            continue
+
+        content = soup.body
+        for script in content.find_all("script"):
+            script.decompose()
+        for svg in content.select("svg"):
+            svg.decompose()
+        for header in content.select("header"):
+            header.decompose()
+        results_dict[url] = content.decode()
+
     for event in events:
-        line_up_url = find_line_up_link_for_a_single_festival(event)
-        event["line_up_url"] = line_up_url
-        result.append(event)
+        event["scraped_line_up_html"] = results_dict[event["line_up_url"]]
+    return events
+
+
+def get_line_up_from_html(events: List[dict]) -> List[dict]:
+    """Get line up as list from html code. Use Gemini API for this.
+
+    Args:
+        events (List[dict]): list of events. In "scraped_line_up_html" the html code is stored.
+
+    Returns:
+        List[dict]: Events with "line-up" added.
+
+    """
+
+    def single(event):
+        if event["scraped_line_up_html"] is None:
+            event["line-up"] = []
+            return event
+
+        prompt = f"""List the bands mentioned in the following HTML code. Only return the bands you are sure about and list them in a python array. If you cannot find any bands return an empty array. Do not add country or city information about the bands, only list their names.\n\n{event["scraped_line_up_html"]}"""
+        bands = json.loads(gemini_generate(prompt))
+        event["line-up"] = bands
+        return event
+
+    result = []
+    total = len(events)
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        # Start the load operations and mark each future with its URL
+        future_to_url = {executor.submit(single, event): event for event in events}
+        for future in concurrent.futures.as_completed(future_to_url):
+            event = future_to_url[future]
+            try:
+                event = future.result()
+            except Exception as exc:
+                print("%s generated an exception: %s" % (event["url"], exc))
+            else:
+                result.append(event)
+                if (current := len(result)) % 50 == 0 or current > total - 40:
+                    print(f"\r{current}/{total}", end="")
     return result
 
 
 if __name__ == "__main__":
-    events = crawl_festivals_from_festival_ticker()
-    events = add_line_up_links(events)
+    load_dotenv(override=True)
+    # events = crawl_festivals_from_festival_ticker()
+    # with open("events.json", "w") as f:
+    #     json.dump(events, f)
+    # events = add_line_up_links(events)
+    # with open("events2.json", "r") as f:
+    #     events = json.load(f)
+    # events = get_html_from_line_up_links(events[:40])
 
-    with open("events.json", "w") as f:
+    # with open("events_with_line_up_text.json", "w") as f:
+    #     json.dump(events, f)
+
+    with open("events_with_line_up_text.json", "r") as f:
+        events = json.load(f)
+    events = get_line_up_from_html(events[:40])
+    with open("steps/events_with_bands.json", "w") as f:
         json.dump(events, f)
+
+    # TODO: gemini stuff in parallel
+    # TODO: clean up code
+    # TODO: mac update
+
+# TODO: skip facebook links: these are trash, if you do not have your own website youi lose
+# TODO: schauen wie oft in 217 (find_line_up_link_for_a_single_festival letzte zeile) die base url zurückgegeben wird
+# ggf nochmal mit selenium die seite holen und letzten schritt (nach link suchen) ausführen

@@ -3,3 +3,4 @@ beautifulsoup4
 tqdm
 ruff
 pre-commit
+google-generativeai
