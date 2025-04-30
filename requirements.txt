@@ -4,3 +4,4 @@ tqdm
 ruff
 pre-commit
 google-generativeai
+playwright
