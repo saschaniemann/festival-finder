@@ -498,21 +498,66 @@ def get_line_up_from_html(events: List[dict]) -> List[dict]:
 
     """
 
-    def single(event):
+    def single(event: dict, first_attempt: bool = True):
         if event["scraped_line_up_html"] is None:
             event["line-up"] = []
             return event
 
-        prompt = f"""List the bands mentioned in the following HTML code. Only return the bands you are sure about and list them in a python array. If you cannot find any bands return an empty array. Do not add country or city information about the bands, only list their names.\n\n{event["scraped_line_up_html"]}"""
-        bands = json.loads(gemini_generate(prompt))
+        prompt = """List the bands mentioned in the following HTML code. Only return the bands you are sure about and list them in a python array. If you cannot find any bands return an empty array. Do not add country or city information about the bands, only list their names.\n\n"""
+        try:
+            response = gemini_generate(prompt + str(event["scraped_line_up_html"]))
+        # to avoid recitation error: do not pass all the html code but only the text
+        except ValueError:
+            response = gemini_generate(
+                prompt
+                + BeautifulSoup(event["scraped_line_up_html"], "html.parser").text
+            )
+
+        try:
+            bands = json.loads(response)
+        except Exception as e:
+            if first_attempt:
+                print(
+                    f"Error in single. Retrying one more time for {event['name']}:", e
+                )
+                return single(event, first_attempt=False)
+            else:
+                bands = []
         event["line-up"] = bands
         return event
+
+    def single_wrapped_try_except(event: dict):
+        """Wrap the single function in a try catch.
+
+        This is needed to ensure that
+        ThreadPoolExecuter will not have to catch an exception. This might lead to a
+        deadlock:
+        The ThreadPoolExecutor's thread pool catches the exception (it doesn't crash
+        the entire program!) and stores it within the corresponding Future object.
+        If the main thread later calls future.result() or future.exception() on the
+        Future object (usually to get the result or to check for an exception), it
+        will attempt to retrieve the stored exception. The result() and exception()
+        methods internally call the internal lock and that's where you are stuck.
+
+        Args:
+            event (dict): event
+
+        Returns:
+            dict: event with "line-up" field added
+
+        """
+        try:
+            return single(event)
+        except Exception as e:
+            print(f"Exception in single_wrapped_try_except for {event['name']}:", e)
 
     result = []
     total = len(events)
     with concurrent.futures.ThreadPoolExecutor() as executor:
         # Start the load operations and mark each future with its URL
-        future_to_url = {executor.submit(single, event): event for event in events}
+        future_to_url = {
+            executor.submit(single_wrapped_try_except, event): event for event in events
+        }
         for future in concurrent.futures.as_completed(future_to_url):
             event = future_to_url[future]
             try:
@@ -528,15 +573,17 @@ def get_line_up_from_html(events: List[dict]) -> List[dict]:
 
 if __name__ == "__main__":
     load_dotenv(override=True)
-    events = crawl_festivals_from_festival_ticker()
-    with open("steps/events.json", "w") as f:
-        json.dump(events, f)
-    events = add_line_up_links(events)
-    with open("steps/events_with_line_up_links.json", "w") as f:
-        json.dump(events, f)
-    events = get_html_from_line_up_links(events)
-    with open("steps/events_with_html_code.json", "w") as f:
-        json.dump(events, f)
+    # events = crawl_festivals_from_festival_ticker()
+    # with open("steps/events.json", "w") as f:
+    #     json.dump(events, f)
+    # events = add_line_up_links(events)
+    # with open("steps/events_with_line_up_links.json", "w") as f:
+    #     json.dump(events, f)
+    # events = get_html_from_line_up_links(events)
+    # with open("steps/events_with_html_code.json", "w") as f:
+    #     json.dump(events, f)
+    with open("steps/events_with_html_code.json", "r") as f:
+        events = json.load(f)
     events = get_line_up_from_html(events)
     with open("steps/events_with_bands.json", "w") as f:
         json.dump(events, f)
@@ -547,3 +594,4 @@ if __name__ == "__main__":
 # TODO: skip facebook links: these are trash, if you do not have your own website youi lose
 # TODO: schauen wie oft in 217 (find_line_up_link_for_a_single_festival letzte zeile) die base url zurückgegeben wird
 # ggf nochmal mit selenium die seite holen und letzten schritt (nach link suchen) ausführen
+# TODO: maybe: if content empty (when fetching line ups html content): retry with accepting images and run imagen?
