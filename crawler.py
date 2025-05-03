@@ -206,6 +206,7 @@ def gemini_generate(prompt: str) -> str:
                 generation_config=GenerationConfig(
                     response_mime_type="application/json"
                 ),
+                request_options={"timeout": 60 * 60},  # 1h
             )
         except ResourceExhausted as e:
             time.sleep(25)
