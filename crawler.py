@@ -26,7 +26,7 @@ USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTM
 MAX_CONCURRENT_PAGES = 10
 MAX_CONCURRENT_TASKS = 10
 BLOCK_RESOURCE_TYPES = ["image", "stylesheet", "font", "media"]
-MAX_RETRIES = 3
+MAX_RETRIES = 2 * 30
 NAV_TIMEOUT_MS = 30000
 EXTRA_WAIT_MS = 2000
 
@@ -195,25 +195,30 @@ def gemini_generate(prompt: str) -> str:
 
     """
     genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-
     model = genai.GenerativeModel("gemini-2.0-flash-lite")
 
-    response = None
-    while response is None:
+    def safe_generate():
+        return model.generate_content(
+            prompt,
+            generation_config=GenerationConfig(response_mime_type="application/json"),
+            request_options={"timeout": 60 * 30},  # 30min
+        )
+
+    for attempt in range(MAX_RETRIES):
         try:
-            response = model.generate_content(
-                prompt,
-                generation_config=GenerationConfig(
-                    response_mime_type="application/json"
-                ),
-                request_options={"timeout": 60 * 60},  # 1h
-            )
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(safe_generate)
+                response = future.result(timeout=60 * 31)  # 31min
+                return response.text
+        except concurrent.futures.TimeoutError:
+            print(f"Timeout on attempt {attempt + 1}")
         except ResourceExhausted as e:
-            time.sleep(25)
+            print("ResourceExhausted.")
         except DeadlineExceeded as e:
             print("Got DeadlineExceeded:", e)
+        time.sleep(25)
 
-    return response.text
+    return None
 
 
 def get_festival_list() -> List[dict]:
@@ -501,7 +506,7 @@ def get_line_up_from_html(events: List[dict]) -> List[dict]:
 
     """
 
-    def single(event: dict, first_attempt: bool = True):
+    def single(event: dict):
         if event["scraped_line_up_html"] is None:
             event["line-up"] = []
             return event
@@ -518,14 +523,8 @@ def get_line_up_from_html(events: List[dict]) -> List[dict]:
 
         try:
             bands = json.loads(response)
-        except Exception as e:
-            if first_attempt:
-                print(
-                    f"Error in single. Retrying one more time for {event['name']}:", e
-                )
-                return single(event, first_attempt=False)
-            else:
-                bands = []
+        except Exception:
+            bands = []
         event["line-up"] = bands
         return event
 
@@ -556,24 +555,34 @@ def get_line_up_from_html(events: List[dict]) -> List[dict]:
 
     result = []
     total = len(events)
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        # Start the load operations and mark each future with its URL
-        future_to_url = {
-            executor.submit(single_wrapped_try_except, event): event for event in events
-        }
-        for future in concurrent.futures.as_completed(future_to_url):
-            event = future_to_url[future]
-            try:
-                event = future.result(timeout=60 * 60 * 1.5)  # 1.5h for each item
-            except concurrent.futures.TimeoutError:
-                print(f"{event['name']} took too long: concurrent.futures.TimeoutError")
-            except Exception as exc:
-                print("%s generated an exception: %s" % (event["url"], exc))
-            else:
-                result.append(event)
-                if (current := len(result)) % 50 == 0 or current > total - 40:
-                    print(f"\r{current}/{total}", end="")
-    return result
+    try:
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            # Start the load operations and mark each future with its URL
+            future_to_url = {
+                executor.submit(single_wrapped_try_except, event): event
+                for event in events
+            }
+            for future in concurrent.futures.as_completed(future_to_url):
+                event = future_to_url[future]
+                try:
+                    event = future.result(timeout=60 * 60 * 1.5)  # 1.5h for each item
+                except concurrent.futures.TimeoutError:
+                    print(
+                        f"{event['name']} took too long: concurrent.futures.TimeoutError"
+                    )
+                except Exception as exc:
+                    print("%s generated an exception: %s" % (event["url"], exc))
+                else:
+                    result.append(event)
+                    if (current := len(result)) % 50 == 0 or current > total - 40:
+                        print(f"\r{current}/{total}", end="")
+    except KeyboardInterrupt as e:
+        print(e)
+        print("shutting down executor")
+        executor.shutdown(wait=False)
+        print("Returning current list of festivals.")
+    finally:
+        return result
 
 
 if __name__ == "__main__":
