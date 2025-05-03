@@ -19,7 +19,7 @@ from playwright.async_api import (
 )
 import google.generativeai as genai
 from google.generativeai import GenerationConfig
-from google.api_core.exceptions import ResourceExhausted
+from google.api_core.exceptions import ResourceExhausted, DeadlineExceeded
 from dotenv import load_dotenv
 
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
@@ -206,9 +206,12 @@ def gemini_generate(prompt: str) -> str:
                 generation_config=GenerationConfig(
                     response_mime_type="application/json"
                 ),
+                timeout=60 * 60,  # one hour
             )
         except ResourceExhausted as e:
             time.sleep(25)
+        except DeadlineExceeded as e:
+            print("Got DeadlineExceeded:", e)
 
     return response.text
 
@@ -561,7 +564,9 @@ def get_line_up_from_html(events: List[dict]) -> List[dict]:
         for future in concurrent.futures.as_completed(future_to_url):
             event = future_to_url[future]
             try:
-                event = future.result()
+                event = future.result(timeout=60 * 60 * 1.5)  # 1.5h for each item
+            except concurrent.futures.TimeoutError:
+                print(f"{event['name']} took too long: concurrent.futures.TimeoutError")
             except Exception as exc:
                 print("%s generated an exception: %s" % (event["url"], exc))
             else:
