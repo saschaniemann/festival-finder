@@ -601,6 +601,7 @@ if __name__ == "__main__":
     events = get_line_up_from_html(events)
     with open("steps/events_with_bands.json", "w") as f:
         json.dump(events, f)
+    exit(1)  # stop program and thereby kill all created threads
 
     # TODO: clean up code
     # TODO: mac update
