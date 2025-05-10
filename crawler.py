@@ -5,6 +5,9 @@ import json
 import re
 import os
 import time
+import argparse
+from pathlib import Path
+from datetime import datetime, timedelta
 import concurrent.futures
 from bs4 import BeautifulSoup
 from tqdm import tqdm
@@ -221,6 +224,19 @@ def gemini_generate(prompt: str) -> str:
     return None
 
 
+def format_duration(seconds: float) -> str:
+    """Format duration from seconds to hh:mm:ss.
+
+    Args:
+        seconds (float): duration in seconds
+
+    Returns:
+        str: duration formatted
+
+    """
+    return str(timedelta(seconds=int(seconds)))
+
+
 def get_festival_list() -> List[dict]:
     """Crawl name and link to a dedicated page for all festivals listed on festivalticker.de.
 
@@ -274,8 +290,8 @@ def crawl_festival_from_festival_tickers_dedicated_page(url: str):
             .strip()
         )
 
-        # if 'show more genres' was available: genres='<short-list>,... mehr\n<long-list>', only keep <long-list>
-        show_more_text = ",... mehr\n"
+        # if 'show more genres' was available: genres='<short-list>... mehr\n<long-list>', only keep <long-list>
+        show_more_text = "... mehr\n"
         if show_more_text in genre_raw:
             idx = genre_raw.find(show_more_text)
             genre_raw = genre_raw[idx + len(show_more_text) :]
@@ -298,14 +314,21 @@ def crawl_festival_from_festival_tickers_dedicated_page(url: str):
         if len(website_bands_rows) <= 1:
             return []
 
-        bands = website_bands_rows[1].text.strip()
-        if not bands.startswith("Bands:"):
+        tr_index_of_bands = None
+        for i, bands in enumerate(website_bands_rows):
+            bands = bands.text.strip()
+            if bands.startswith("Bands:"):
+                tr_index_of_bands = i
+        if tr_index_of_bands is None:
             return []
 
         bands = bands.split("\n")
-        if len(bands) <= 1:
-            return []
-        bands = bands[1]
+        if len(bands) > 1:
+            bands = bands[1]
+        else:  # in case the "Bands:" heading is not the same row as the bands themselves
+            tr_index_of_bands += 1
+            bands = website_bands_rows[tr_index_of_bands].text.strip()
+
         bands = bands.split(", ")
         bands[0] = bands[0].strip()  # remove leading whitespaces
         # if 'und weitere': remove it
@@ -313,6 +336,24 @@ def crawl_festival_from_festival_tickers_dedicated_page(url: str):
             bands[-1] = bands[-1].split("\r")[0]
 
         return bands
+
+    def extract_location(info):
+        location = {}
+        features = {
+            "Location:": "location",
+            "Plz:": "zip_code",
+            "Ort:": "city",
+            "Strasse:": "address_line_1",
+            "Land:": "country",
+        }
+
+        location_div = info.find_next("div", {"class": "location"})
+        feature_keys = features.keys()
+        for tr in location_div.find_all("tr"):
+            split = tr.text.strip().split("\n")
+            if (feature := split[0].strip()) in feature_keys and len(split) > 1:
+                location[features[feature]] = split[1]
+        return location
 
     response = get_request(url)
     soup = BeautifulSoup(response.content, "html.parser")
@@ -324,6 +365,7 @@ def crawl_festival_from_festival_tickers_dedicated_page(url: str):
     genres = extract_genres(main_info)
     url = extract_festival_url(main_info)
     bands = extract_bands(main_info)
+    location = extract_location(main_info)
 
     return {
         "start_date": start_date,
@@ -331,6 +373,7 @@ def crawl_festival_from_festival_tickers_dedicated_page(url: str):
         "genres": genres,
         "url": url,
         "bands": bands,
+        "location": location,
     }
 
 
@@ -585,28 +628,83 @@ def get_line_up_from_html(events: List[dict]) -> List[dict]:
         return result
 
 
+def clean_up(events: List[dict]) -> List[dict]:
+    """Merge bands and line-up field and remove html code.
+
+    Args:
+        events (List[dict]): events
+
+    Returns:
+        List[dict]: cleaned up events
+
+    """
+    for event in events:
+        lineup = event["line-up"]
+        # in case gemini api returns [[<bands>]] instead of [<bands>]
+        if len(lineup) and isinstance(lineup[0], list):
+            lineup = lineup[0]
+        unique_bands = list(
+            set(s.upper().encode().decode("utf-8") for s in (lineup + event["bands"]))
+        )
+        event["bands"] = unique_bands
+        del event["line-up"]
+        del event["scraped_line_up_html"]
+    return events
+
+
 if __name__ == "__main__":
     load_dotenv(override=True)
-    # events = crawl_festivals_from_festival_ticker()
-    # with open("steps/events.json", "w") as f:
-    #     json.dump(events, f)
-    # events = add_line_up_links(events)
-    # with open("steps/events_with_line_up_links.json", "w") as f:
-    #     json.dump(events, f)
-    # events = get_html_from_line_up_links(events)
-    # with open("steps/events_with_html_code.json", "w") as f:
-    #     json.dump(events, f)
-    with open("steps/events_with_html_code.json", "r") as f:
-        events = json.load(f)
-    events = get_line_up_from_html(events)
-    with open("steps/events_with_bands.json", "w") as f:
-        json.dump(events, f)
-    exit(1)  # stop program and thereby kill all created threads
+    parser = argparse.ArgumentParser(description="Festival Data Pipeline")
+    parser.add_argument(
+        "--override",
+        action="store_true",
+        help="Override all steps and start from scratch",
+    )
+    parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default=Path("steps"),
+        help="Directory to store JSON step files",
+    )
 
-    # TODO: clean up code
-    # TODO: mac update
+    args = parser.parse_args()
 
-# TODO: skip facebook links: these are trash, if you do not have your own website youi lose
-# TODO: schauen wie oft in 217 (find_line_up_link_for_a_single_festival letzte zeile) die base url zurückgegeben wird
-# ggf nochmal mit selenium die seite holen und letzten schritt (nach link suchen) ausführen
-# TODO: maybe: if content empty (when fetching line ups html content): retry with accepting images and run imagen?
+    pipeline = [
+        (
+            f"{args.data_dir}/events_1_initial.json",
+            lambda _: crawl_festivals_from_festival_ticker(),
+        ),
+        (f"{args.data_dir}/events_2_with_line_up_links.json", add_line_up_links),
+        (f"{args.data_dir}/events_3_with_html_code.json", get_html_from_line_up_links),
+        (f"{args.data_dir}/events_4_with_bands.json", get_line_up_from_html),
+        (f"{args.data_dir}/events.json", clean_up),
+    ]
+
+    events = None
+    start_index = 0
+    if not args.override:
+        for i in reversed(range(len(pipeline))):
+            path = Path(pipeline[i][0])
+            if path.exists():
+                print(f"Resuming from: {path}")
+                with open(path, "r") as f:
+                    events = json.load(f)
+                start_index = i + 1
+                break
+
+    for i in range(start_index, len(pipeline)):
+        filename, func = pipeline[i]
+        print(f"Running step {i + 1}: {func.__name__}...")
+
+        start_time = datetime.now()
+        events = func(events)
+        duration = datetime.now() - start_time
+
+        Path(filename).parent.mkdir(parents=True, exist_ok=True)
+        with open(filename, "w") as f:
+            json.dump(events, f, indent=2)
+
+        print(
+            f"Step {i + 1} completed in {format_duration(duration.total_seconds())}\n"
+        )
+    exit(0)  # stop program and thereby kill all created threads
