@@ -595,6 +595,7 @@ def get_line_up_from_html(events: List[dict]) -> List[dict]:
             return single(event)
         except Exception as e:
             print(f"Exception in single_wrapped_try_except for {event['name']}:", e)
+            return event
 
     result = []
     total = len(events)
@@ -639,7 +640,7 @@ def clean_up(events: List[dict]) -> List[dict]:
 
     """
     for event in events:
-        lineup = event["line-up"]
+        lineup = event["line-up"] if "line-up" in event else []
         # in case gemini api returns [[<bands>]] instead of [<bands>]
         if len(lineup) and isinstance(lineup[0], list):
             lineup = lineup[0]
