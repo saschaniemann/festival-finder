@@ -24,6 +24,8 @@ import google.generativeai as genai
 from google.generativeai import GenerationConfig
 from google.api_core.exceptions import ResourceExhausted, DeadlineExceeded
 from dotenv import load_dotenv
+from geopy.geocoders import Nominatim
+from geopy.exc import GeocoderTimedOut
 
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
 MAX_CONCURRENT_PAGES = 10
@@ -243,6 +245,27 @@ def format_duration(seconds: float) -> str:
     return str(timedelta(seconds=int(seconds)))
 
 
+def get_lat_long(location: str) -> Tuple[Optional[float], Optional[float]]:
+    """Get latitude and longitude from address string. If not found, `None, None` is returned.
+
+    Args:
+        location (str): address
+
+    Returns:
+        Tuple[Optional[float], Optional[float]]: lat, long as float or None, None
+
+    """
+    geolocator = Nominatim(user_agent="crawler")
+    try:
+        loc = geolocator.geocode(location)
+        if loc:
+            return loc.latitude, loc.longitude
+    except GeocoderTimedOut:
+        pass
+
+    return None, None
+
+
 def get_festival_list() -> List[dict]:
     """Crawl name and link to a dedicated page for all festivals listed on festivalticker.de.
 
@@ -359,6 +382,14 @@ def crawl_festival_from_festival_tickers_dedicated_page(url: str):
             split = tr.text.strip().split("\n")
             if (feature := split[0].strip()) in feature_keys and len(split) > 1:
                 location[features[feature]] = split[1]
+
+        query = ", ".join(
+            [location[feature] for feature in features.values() if feature in location]
+        )
+        latitude, longitude = get_lat_long(query)
+        location["latitude"] = latitude
+        location["longitude"] = longitude
+
         return location
 
     response = get_request(url)
