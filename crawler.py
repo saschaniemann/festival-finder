@@ -424,31 +424,17 @@ def crawl_festivals_from_festival_ticker() -> List[dict]:
     events = get_festival_list()
 
     events_updated = []
-    with tqdm(
-        total=len(events), desc="Scraping info of festival ticker's dedicated pages"
-    ) as pbar:
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            # Start the load operations and mark each future with its URL
-            future_to_url = {
-                executor.submit(
-                    crawl_festival_from_festival_tickers_dedicated_page,
-                    event["festival_ticker_url"],
-                ): event
-                for event in events
-            }
-            for future in concurrent.futures.as_completed(future_to_url):
-                event = future_to_url[future]
-                try:
-                    info = future.result()
-                except Exception as exc:
-                    print(
-                        "%s generated an exception: %s"
-                        % (event["festival_ticker_url"], exc)
-                    )
-                else:
-                    event.update(info)
-                    events_updated.append(event)
-                pbar.update(1)
+    for event in tqdm(
+        events, desc="Scraping info of festival ticker's dedicated pages"
+    ):
+        info = crawl_festival_from_festival_tickers_dedicated_page(
+            event["festival_ticker_url"]
+        )
+        time.sleep(
+            1
+        )  # sleep 1s since Nominatim geocoder only allows 1 request per second
+        event.update(info)
+        events_updated.append(event)
 
     return events_updated
 
