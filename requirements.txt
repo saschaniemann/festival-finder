@@ -6,3 +6,6 @@ pre-commit
 google-generativeai
 playwright
 python-dotenv
+geopy
+pandas
+streamlit
