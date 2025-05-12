@@ -68,6 +68,11 @@ async def fetch_page_content(
     context = None
     soup = None
 
+    # facebook pages do not lead to any info since there is always the login screen.
+    # if the page does not have its own website they do not deserve all bands to be listed.
+    if "facebook" in url:
+        return url, soup
+
     async with semaphore:
         try:
             # Create a new isolated browser context for each request
@@ -216,7 +221,8 @@ def gemini_generate(prompt: str) -> str:
         except concurrent.futures.TimeoutError:
             print(f"Timeout on attempt {attempt + 1}")
         except ResourceExhausted as e:
-            print("ResourceExhausted.")
+            pass  # this happens way too often. floods output
+            # print("ResourceExhausted.")
         except DeadlineExceeded as e:
             print("Got DeadlineExceeded:", e)
         time.sleep(25)
@@ -500,7 +506,9 @@ def add_line_up_links(events: List[dict]) -> List[dict]:
                 event["line_up_url"] = line_up_url
                 result.append(event)
                 if (current := len(result)) % 50 == 0 or current > last_percents:
-                    print(f"\r{current}/{total}", end="")
+                    print(
+                        f"\r{float(current)/total*100:.1}%: {current}/{total}", end=""
+                    )
 
     return result
 
@@ -619,7 +627,10 @@ def get_line_up_from_html(events: List[dict]) -> List[dict]:
                 else:
                     result.append(event)
                     if (current := len(result)) % 50 == 0 or current > total - 40:
-                        print(f"\r{current}/{total}", end="")
+                        print(
+                            f"\r{float(current)/total*100:.1}%: {current}/{total}",
+                            end="",
+                        )
     except KeyboardInterrupt as e:
         print(e)
         print("shutting down executor")
