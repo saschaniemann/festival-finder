@@ -256,7 +256,7 @@ def get_lat_long(location: str) -> Tuple[Optional[float], Optional[float]]:
 
     """
     encoded_address = urllib.parse.quote(location)
-    url = f"https://api.geoapify.com/v1/geocode/search?text={encoded_address}&apiKey={os.getenv("GEOAPIFY_API_KEY")}"
+    url = f"https://api.geoapify.com/v1/geocode/search?text={encoded_address}&apiKey={os.getenv('GEOAPIFY_API_KEY')}"
 
     headers = CaseInsensitiveDict()
     headers["Accept"] = "application/json"
