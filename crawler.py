@@ -24,8 +24,8 @@ import google.generativeai as genai
 from google.generativeai import GenerationConfig
 from google.api_core.exceptions import ResourceExhausted, DeadlineExceeded
 from dotenv import load_dotenv
-from geopy.geocoders import Nominatim
-from geopy.exc import GeocoderTimedOut
+from requests.structures import CaseInsensitiveDict
+import urllib.parse
 
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
 MAX_CONCURRENT_PAGES = 10
@@ -255,15 +255,31 @@ def get_lat_long(location: str) -> Tuple[Optional[float], Optional[float]]:
         Tuple[Optional[float], Optional[float]]: lat, long as float or None, None
 
     """
-    geolocator = Nominatim(user_agent="crawler")
-    try:
-        loc = geolocator.geocode(location)
-        if loc:
-            return loc.latitude, loc.longitude
-    except GeocoderTimedOut:
-        pass
+    encoded_address = urllib.parse.quote(location)
+    url = f"https://api.geoapify.com/v1/geocode/search?text={encoded_address}&apiKey={os.getenv("GEOAPIFY_API_KEY")}"
 
-    return None, None
+    headers = CaseInsensitiveDict()
+    headers["Accept"] = "application/json"
+
+    try:
+        resp = requests.get(url, headers=headers)
+        resp.raise_for_status()
+
+        data = resp.json()
+        features = data.get("features")
+
+        if features:
+            coords = features[0]["geometry"]["coordinates"]
+            longitude, latitude = coords[0], coords[1]
+            return latitude, longitude
+        else:
+            print(
+                f"[GEOCODER]: No coordinates found for the given address. ({location})"
+            )
+            return None, None
+    except requests.RequestException as e:
+        print(f"[GEOCODER]: Request failed: {e}")
+        return None, None
 
 
 def get_festival_list() -> List[dict]:
@@ -430,9 +446,6 @@ def crawl_festivals_from_festival_ticker() -> List[dict]:
         info = crawl_festival_from_festival_tickers_dedicated_page(
             event["festival_ticker_url"]
         )
-        time.sleep(
-            1
-        )  # sleep 1s since Nominatim geocoder only allows 1 request per second
         event.update(info)
         events_updated.append(event)
 
