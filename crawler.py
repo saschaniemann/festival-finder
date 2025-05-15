@@ -326,6 +326,7 @@ def crawl_festival_from_festival_tickers_dedicated_page(url: str):
             bands = bands.text.strip()
             if bands.startswith("Bands:"):
                 tr_index_of_bands = i
+                break
         if tr_index_of_bands is None:
             return []
 
@@ -650,6 +651,7 @@ def clean_up(events: List[dict]) -> List[dict]:
         unique_bands = list(
             set(s.upper().encode().decode("utf-8") for s in (lineup + event["bands"]))
         )
+        unique_bands.remove("")
         event["bands"] = unique_bands
         del event["line-up"]
         del event["scraped_line_up_html"]
