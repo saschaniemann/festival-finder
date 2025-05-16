@@ -7,6 +7,9 @@ from datetime import datetime
 from typing import List
 from geopy.distance import geodesic
 
+st.set_page_config(page_title="Festival finder", page_icon="favicon.png")
+st.title("Festival Finder")
+
 
 # Load JSON data
 @st.cache_data
@@ -26,9 +29,6 @@ all_genres = sorted({g for sub in data["genres"] for g in sub})
 all_bands = sorted({b for sub in data["bands"] for b in sub})
 month_numbers = list(range(1, 13))  # 1 to 12
 month_names = {i: datetime(2025, i, 1).strftime("%B") for i in month_numbers}
-
-st.set_page_config(page_title="Festival finder", page_icon="favicon.png")
-st.title("Festival Finder")
 
 with st.form("filter_form"):
     genres = st.multiselect("Genres", options=all_genres)
