@@ -4,12 +4,13 @@ import math
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+from typing import List
 from geopy.distance import geodesic
 
 
 # Load JSON data
 @st.cache_data
-def load_data(path="steps/events.json"):
+def load_data(path="events.json"):
     """Load data from json."""
     return pd.read_json(path)
 
@@ -102,8 +103,15 @@ if submitted:
             st.markdown(f"**Datum:** {date_str}")
             if "distance_km" in row:
                 st.markdown(f"**Entfernung:** {row['distance_km']:.1f} km")
-            st.markdown(f"**Genres:** {', '.join(row['genres'])}")
-            st.markdown(f"**Bands:** {', '.join(row['bands'])}")
+            genres_formatted = [
+                genre if genre not in genres else f"**{genre}**"
+                for genre in row["genres"]
+            ]
+            st.markdown(f"**Genres:** {', '.join(genres_formatted)}")
+            bands_formatted = [
+                band if band not in bands else f"**{band}**" for band in row["bands"]
+            ]
+            st.markdown(f"**Bands:** {', '.join(bands_formatted)}")
             st.markdown(
                 f"[Festival-Website]({row['url']}) | [Line-up]({row['line_up_url']}) | [Festivalticker]({row['festival_ticker_url']})"
             )
