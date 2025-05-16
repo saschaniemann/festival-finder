@@ -27,6 +27,7 @@ all_bands = sorted({b for sub in data["bands"] for b in sub})
 month_numbers = list(range(1, 13))  # 1 to 12
 month_names = {i: datetime(2025, i, 1).strftime("%B") for i in month_numbers}
 
+st.set_page_config(page_title="Festival finder", page_icon="favicon.png")
 st.title("Festival Finder")
 
 with st.form("filter_form"):
