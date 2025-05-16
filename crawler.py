@@ -651,7 +651,8 @@ def clean_up(events: List[dict]) -> List[dict]:
         unique_bands = list(
             set(s.upper().encode().decode("utf-8") for s in (lineup + event["bands"]))
         )
-        unique_bands.remove("")
+        if "" in unique_bands:
+            unique_bands.remove("")
         event["bands"] = unique_bands
         del event["line-up"]
         del event["scraped_line_up_html"]
