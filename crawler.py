@@ -309,6 +309,8 @@ def crawl_festival_from_festival_tickers_dedicated_page(url: str):
             genres[-1] = genres[-1][:-4]
         elif genres[-1][-10:] == " ... close":
             genres[-1] = genres[-1][:-10]
+        elif genres[-1].endswith("close"):
+            genres[-1] = genres[-1][:-5].strip()
 
         return genres
 
