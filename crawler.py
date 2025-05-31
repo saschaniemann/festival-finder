@@ -557,21 +557,53 @@ def get_line_up_from_html(events: List[dict]) -> List[dict]:
             event["line-up"] = []
             return event
 
-        prompt = """List the bands mentioned in the following HTML code. Only return the bands you are sure about and list them in a python array. If you cannot find any bands return an empty array. Do not add country or city information about the bands, only list their names.\n\n"""
+        prompt = f"""List the bands mentioned in the following HTML code and map the provided genres to broader categories. Only return the bands you are sure about and list them in a python array. If you cannot find any bands, return an empty array. For genres, map the provided list to broader categories such as 'Rock', 'Metal', etc., and return them in a python array. Do not add country or city information about the bands or genres, only list their names.
+        The output should be a JSON object with two fields: "bands" and "genres".
+
+        ==HTML CODE==
+        {str(event["scraped_line_up_html"])}
+        ==END HTML CODE==
+
+        ==GENRES==
+        {", ".join(event["genres"])}
+        ==END GENRES==
+
+        ==OUTPUT FORMAT==
+        {{
+            "bands": ["Band1", "Band2", ...],
+            "genres": ["Genre1", "Genre2", ...]
+        }}"""
         try:
-            response = gemini_generate(prompt + str(event["scraped_line_up_html"]))
+            response = gemini_generate(prompt)
         # to avoid recitation error: do not pass all the html code but only the text
         except ValueError:
-            response = gemini_generate(
-                prompt
-                + BeautifulSoup(event["scraped_line_up_html"], "html.parser").text
-            )
+            prompt = f"""List the bands mentioned in the following text and map the provided genres to broader categories. Only return the bands you are sure about and list them in a python array. If you cannot find any bands, return an empty array. For genres, map the provided list to broader categories such as 'Rock', 'Metal', etc., and return them in a python array. Do not add country or city information about the bands or genres, only list their names.
+            The output should be a JSON object with two fields: "bands" and "genres".
+
+            ==TEXT CONTAINING BANDS==
+            {BeautifulSoup(event["scraped_line_up_html"], "html.parser").text}
+            ==END TEXT CONTAINING BANDS==
+
+            ==GENRES==
+            {", ".join(event["genres"])}
+            ==END GENRES==
+
+            ==OUTPUT FORMAT==
+            {{
+                "bands": ["Band1", "Band2", ...],
+                "genres": ["Genre1", "Genre2", ...]
+            }}"""
+            response = gemini_generate(prompt)
 
         try:
-            bands = json.loads(response)
+            response_json = json.loads(response)
+            bands = response_json.get("bands", [])
+            genres = response_json.get("genres", [])
         except Exception:
             bands = []
+            genres = event["genres"]
         event["line-up"] = bands
+        event["genres_cleaned_up"] = genres
         return event
 
     def single_wrapped_try_except(event: dict):
