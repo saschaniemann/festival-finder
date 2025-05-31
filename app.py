@@ -25,7 +25,7 @@ data["start_date"] = pd.to_datetime(data["start_date"], format="%d.%m.%Y")
 data["end_date"] = pd.to_datetime(data["end_date"], format="%d.%m.%Y")
 
 # Extract unique filters
-all_genres = sorted({g for sub in data["genres"] for g in sub})
+all_genres = sorted({g for sub in data["genres_cleaned_up"] for g in sub})
 all_bands = sorted({b for sub in data["bands"] for b in sub})
 month_numbers = list(range(1, 13))  # 1 to 12
 month_names = {i: datetime(2025, i, 1).strftime("%B") for i in month_numbers}
@@ -47,7 +47,7 @@ if submitted:
     filtered = data.copy()
     if genres:
         filtered = filtered[
-            filtered["genres"].apply(lambda gl: any(g in gl for g in genres))
+            filtered["genres_cleaned_up"].apply(lambda gl: any(g in gl for g in genres))
         ]
     if selected_months:
 
@@ -104,10 +104,17 @@ if submitted:
             st.markdown(f"**Datum:** {date_str}")
             if "distance_km" in row:
                 st.markdown(f"**Entfernung:** {row['distance_km']:.1f} km")
-            genres_formatted = [
-                genre if genre not in genres else f"**{genre}**"
-                for genre in row["genres"]
-            ]
+            # format genres by bolding the selected genres
+            genres_formatted = []
+            for genre in row["genres_cleaned_up"]:
+                words = genre.split()
+                formatted_words = [
+                    f"**{word}**"
+                    if any(g.lower() == word.lower() for g in genres)
+                    else word
+                    for word in words
+                ]
+                genres_formatted.append(" ".join(formatted_words))
             st.markdown(f"**Genres:** {', '.join(genres_formatted)}")
             bands_formatted = [
                 band if band not in bands else f"**{band}**" for band in row["bands"]
