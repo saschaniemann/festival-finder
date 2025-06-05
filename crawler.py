@@ -635,8 +635,52 @@ def get_line_up_from_html(events: List[dict]) -> List[dict]:
         return result
 
 
+def clean_up_genres(events: List[dict]) -> None:
+    """Run set of all genres through Gemini API to clean them up.
+
+    Let Gemini API generate a dictionary to map each genre to a broader
+    genre, e.g. for the broader genre "Afrobeats":
+    ```python
+    {
+        "Afrobeat": "Afrobeats",
+        "Afrobeats": "Afrobeats",
+        "Afro": "Afrobeats"
+    }
+    ```
+    Write this dict to `cleaned_up_genres.json`.
+
+    Args:
+        events (List[dict]): events
+
+    """
+    all_genres = set()
+    for event in events:
+        if "genres" in event and isinstance(event["genres"], list):
+            all_genres.update(event["genres"])
+
+    prompt = (
+        """You are a music genre expert. 
+    Please return a dictionary that maps each genre to a broader genre. 
+    For example, if the input is ['Afrobeat', 'Afrobeats', 'Afro'], the output should be 
+    {'Afrobeat': 'Afrobeats', 'Afrobeats': 'Afrobeats', 'Afro': 'Afrobeats'}. For ['Hard Rock', 'Death Metal', 'Heavy Metal'],
+    the output should be {'Hard Rock': 'Rock', 'Death Metal': 'Metal', 'Heavy Metal': 'Metal'}.
+    If a genre does not have a broader genre, map it to itself. 
+    The input genres are: ["""
+        + ", ".join(all_genres)
+        + "]. Return the dictionary as a JSON string."
+    )
+    response = gemini_generate(prompt)
+    try:
+        cleaned_up_genres = json.loads(response)
+    except json.JSONDecodeError as e:
+        print(f"Error decoding JSON response: {e}")
+        cleaned_up_genres = {}
+    with open("cleaned_up_genres.json", "w") as f:
+        json.dump(cleaned_up_genres, f, indent=4)
+
+
 def clean_up(events: List[dict]) -> List[dict]:
-    """Merge bands and line-up field and remove html code.
+    """Merge bands and line-up field, remove html code and clean up genres.
 
     Args:
         events (List[dict]): events
@@ -658,6 +702,7 @@ def clean_up(events: List[dict]) -> List[dict]:
         event["bands"] = unique_bands
         del event["line-up"]
         del event["scraped_line_up_html"]
+    clean_up_genres(events=events)
     return events
 
 
