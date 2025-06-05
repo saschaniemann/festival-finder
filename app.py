@@ -25,11 +25,7 @@ data["start_date"] = pd.to_datetime(data["start_date"], format="%d.%m.%Y")
 data["end_date"] = pd.to_datetime(data["end_date"], format="%d.%m.%Y")
 
 # Extract unique filters
-all_genres = set()
-for sub in data["genres_cleaned_up"]:
-    if isinstance(sub, list):
-        all_genres.update({g for g in sub})
-all_genres = sorted(all_genres)
+all_genres = sorted({g for sub in data["genres_cleaned_up"] for g in sub})
 all_bands = sorted({b for sub in data["bands"] for b in sub})
 month_numbers = list(range(1, 13))  # 1 to 12
 month_names = {i: datetime(2025, i, 1).strftime("%B") for i in month_numbers}
