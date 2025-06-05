@@ -665,7 +665,8 @@ def clean_up_genres(events: List[dict], data_dir: str) -> None:
     For example, if the input is ['Afrobeat', 'Afrobeats', 'Afro'], the output should be 
     {'Afrobeat': 'Afrobeats', 'Afrobeats': 'Afrobeats', 'Afro': 'Afrobeats'}. For ['Hard Rock', 'Death Metal', 'Heavy Metal'],
     the output should be {'Hard Rock': 'Rock', 'Death Metal': 'Metal', 'Heavy Metal': 'Metal'}.
-    If a genre does not have a broader genre, map it to itself. 
+    If a genre does not have a broader genre, map it to itself. Make sure every original genre exists as a key
+    of that dict.
     The input genres are: ["""
         + ", ".join(all_genres)
         + "]. Return the dictionary as a JSON string."
