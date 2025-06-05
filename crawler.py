@@ -635,7 +635,7 @@ def get_line_up_from_html(events: List[dict]) -> List[dict]:
         return result
 
 
-def clean_up_genres(events: List[dict]) -> None:
+def clean_up_genres(events: List[dict], data_dir: str) -> None:
     """Run set of all genres through Gemini API to clean them up.
 
     Let Gemini API generate a dictionary to map each genre to a broader
@@ -651,6 +651,7 @@ def clean_up_genres(events: List[dict]) -> None:
 
     Args:
         events (List[dict]): events
+        data_dir (str): path of data directory
 
     """
     all_genres = set()
@@ -675,7 +676,7 @@ def clean_up_genres(events: List[dict]) -> None:
     except json.JSONDecodeError as e:
         print(f"Error decoding JSON response: {e}")
         cleaned_up_genres = {}
-    with open("cleaned_up_genres.json", "w") as f:
+    with open(f"{data_dir}/cleaned_up_genres.json", "w") as f:
         json.dump(cleaned_up_genres, f, indent=4)
 
 
@@ -731,7 +732,10 @@ if __name__ == "__main__":
         (f"{args.data_dir}/events_2_with_line_up_links.json", add_line_up_links),
         (f"{args.data_dir}/events_3_with_html_code.json", get_html_from_line_up_links),
         (f"{args.data_dir}/events_4_with_bands.json", get_line_up_from_html),
-        (f"{args.data_dir}/events.json", clean_up),
+        (
+            f"{args.data_dir}/events.json",
+            lambda events: clean_up(events, args.data_dir),
+        ),
     ]
 
     events = None
