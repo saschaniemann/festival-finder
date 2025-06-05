@@ -680,11 +680,12 @@ def clean_up_genres(events: List[dict], data_dir: str) -> None:
         json.dump(cleaned_up_genres, f, indent=4)
 
 
-def clean_up(events: List[dict]) -> List[dict]:
+def clean_up(events: List[dict], data_dir: str) -> List[dict]:
     """Merge bands and line-up field, remove html code and clean up genres.
 
     Args:
         events (List[dict]): events
+        data_dir (str): path of data directory
 
     Returns:
         List[dict]: cleaned up events
@@ -703,7 +704,7 @@ def clean_up(events: List[dict]) -> List[dict]:
         event["bands"] = unique_bands
         del event["line-up"]
         del event["scraped_line_up_html"]
-    clean_up_genres(events=events)
+    clean_up_genres(events=events, data_dir=data_dir)
     return events
 
 
