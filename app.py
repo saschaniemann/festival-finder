@@ -5,8 +5,10 @@ import streamlit as st
 import pandas as pd
 import json
 from datetime import datetime
-from typing import List
+from typing import List, Tuple, Any
 from geopy.distance import geodesic
+import pydeck as pdk
+from geopy.geocoders import Nominatim
 
 st.set_page_config(page_title="Festival finder", page_icon="favicon.png")
 st.title("Festival Finder")
@@ -33,7 +35,7 @@ def filter_data(
     bands: List[str],
     location_input: str,
     max_distance: int,
-) -> pd.DataFrame:
+) -> Tuple[pd.DataFrame, Any]:
     """Filter the data based on user input."""
     filtered = data.copy()
     if genres:
@@ -71,9 +73,6 @@ def filter_data(
 
     if location_input:
         try:
-            # Geocode input location
-            from geopy.geocoders import Nominatim
-
             geolocator = Nominatim(user_agent="festival_app")
             loc = geolocator.geocode(location_input)
             user_point = (loc.latitude, loc.longitude)
@@ -82,11 +81,100 @@ def filter_data(
                 lambda row: calc_distance(user_point, row), axis=1
             )
             filtered = filtered[filtered["distance_km"] <= max_distance]
+            return filtered, loc
         except Exception as e:
             st.error(
                 f"Ort '{e}' konnte nicht gefunden werden. Bitte überprüfen Sie die Eingabe."
             )
-    return filtered
+    return filtered, None
+
+
+def display_map(data: pd.DataFrame, loc: Any) -> None:
+    """Display the festival locations on a map.
+
+    This function creates a map using pydeck to visualize festival locations
+    and the user's location. It uses latitude and longitude from the data
+    and adds markers for each festival and the user's location.
+
+    Args:
+        data (pd.DataFrame): festival data
+        loc (Any): location containing latitude and longitude of the user
+
+    """
+    if data is None or data.empty or loc is None:
+        return
+
+    # Prepare data for map
+    map_data = pd.DataFrame(
+        {
+            "lat": [
+                row["location"]["latitude"]
+                for _, row in data.iterrows()
+                if "location" in row and "latitude" in row["location"]
+            ],
+            "lon": [
+                row["location"]["longitude"]
+                for _, row in data.iterrows()
+                if "location" in row and "longitude" in row["location"]
+            ],
+            "info": [
+                row["name"]
+                for _, row in data.iterrows()
+                if "location" in row and "latitude" in row["location"]
+            ],
+            "is_user": [False] * len(data),
+        }
+    )
+
+    # Add user location
+    map_data = pd.concat(
+        [
+            map_data,
+            pd.DataFrame(
+                {
+                    "lat": [loc.latitude],
+                    "lon": [loc.longitude],
+                    "info": ["Your Location"],
+                    "is_user": [True],
+                }
+            ),
+        ]
+    )
+
+    map_data["icon_data"] = [
+        {
+            "url": "https://img.icons8.com/ios-filled/50/FA5252/marker-a.png"
+            if row
+            else "https://img.icons8.com/ios-filled/50/4a90e2/full-stop--v1.png",
+            "width": 64 if row else 32,
+            "height": 64 if row else 32,
+            "anchorY": 64 if row else 32,
+        }
+        for row in map_data["is_user"]
+    ]
+
+    icon_layer = pdk.Layer(
+        type="IconLayer",
+        data=map_data,
+        get_icon="icon_data",
+        get_size=4,
+        size_scale=10,
+        get_position="[lon, lat]",
+        pickable=True,
+    )
+
+    tooltip = {"html": "<b>{info}</b>", "style": {"color": "white"}}
+
+    st.pydeck_chart(
+        pdk.Deck(
+            map_style="mapbox://styles/mapbox/light-v9",
+            initial_view_state=pdk.ViewState(
+                latitude=loc.latitude, longitude=loc.longitude, zoom=5, pitch=0
+            ),
+            layers=[icon_layer],
+            tooltip=tooltip,
+        )
+    )
 
 
 def display_results(data: pd.DataFrame, genres: List[str], bands: List[str]):
@@ -94,6 +182,11 @@ def display_results(data: pd.DataFrame, genres: List[str], bands: List[str]):
     if data.empty:
         st.warning("Keine Festivals gefunden, die den Kriterien entsprechen.")
         return
+
+    if "distance_km" in data.columns and "location" in st.session_state:
+        with st.expander("Festival-Standorte auf Karte anzeigen"):
+            location_input = st.session_state.location
+            display_map(data, location_input)
 
     for _, row in data.iterrows():
         st.markdown(f"### {row['name']}")
@@ -152,7 +245,7 @@ if "data" not in st.session_state:
     st.session_state.data = pd.DataFrame()
 
 if submitted:
-    st.session_state.data = filter_data(
+    st.session_state.data, st.session_state.location = filter_data(
         data, genres, selected_months, bands, location_input, max_distance
     )
 
