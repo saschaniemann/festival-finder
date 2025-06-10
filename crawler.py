@@ -683,7 +683,7 @@ def clean_up_genres(events: List[dict], data_dir: str) -> None:
             """The following dictionary has already been built. Simply add the missing genres mentioned above and return the combined dictionary:
         {
             """
-            + ", ".join([f"'{key}': '{value}'" for key, value in clean_up_genres])
+            + ", ".join([f"'{key}': '{value}'" for key, value in cleaned_up_genres])
             + """
         }
         """
