@@ -12,7 +12,7 @@ import pydeck as pdk
 from utils import get_lat_long
 from dotenv import load_dotenv
 
-st.set_page_config(page_title="Festival finder", page_icon="favicon.png")
+st.set_page_config(page_title="Festival finder", page_icon="assets/favicon.png")
 st.title("Festival Finder")
 
 

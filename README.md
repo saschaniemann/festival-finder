@@ -30,11 +30,11 @@ Festival Finder is a web application designed to help users discover music festi
 
 1. Run the crawler. This might take a couple of hours (mostly limited by Gemini's and Geoapify's API limitations of the free tier):
     ```bash
-    python crawler.py
+    python scripts/crawler.py
     ```
 2. Start the application:
     ```bash
-    streamlit run app.py
+    streamlit run scripts/app.py
     ```
 3. Open the application in your browser (usually at `http://localhost:8501`).
 4. Use the filters to search for festivals by location, genre, date, or bands.
