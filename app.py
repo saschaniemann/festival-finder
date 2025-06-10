@@ -227,6 +227,7 @@ def display_results(data: pd.DataFrame, genres: List[str], bands: List[str]):
         st.markdown("---")
 
 
+load_env()
 data = load_data()
 genre_map = load_genre_map()
 
