@@ -3,6 +3,7 @@
 import math
 import streamlit as st
 import pandas as pd
+import json
 from datetime import datetime
 from typing import List
 from geopy.distance import geodesic
@@ -18,14 +19,23 @@ def load_data(path="events.json"):
     return pd.read_json(path)
 
 
+def load_genre_map(path="cleaned_up_genres.json"):
+    """Load genre map from json."""
+    with open(path, "r") as f:
+        return json.load(f)
+
+
 data = load_data()
+genre_map = load_genre_map()
 
 # Preprocessing
 data["start_date"] = pd.to_datetime(data["start_date"], format="%d.%m.%Y")
 data["end_date"] = pd.to_datetime(data["end_date"], format="%d.%m.%Y")
 
 # Extract unique filters
-all_genres = sorted({g for sub in data["genres"] for g in sub})
+all_genres = set(genre_map.values())
+all_genres = all_genres - set(["...", "Unknown"])
+all_genres = sorted(all_genres)
 all_bands = sorted({b for sub in data["bands"] for b in sub})
 month_numbers = list(range(1, 13))  # 1 to 12
 month_names = {i: datetime(2025, i, 1).strftime("%B") for i in month_numbers}
@@ -47,7 +57,11 @@ if submitted:
     filtered = data.copy()
     if genres:
         filtered = filtered[
-            filtered["genres"].apply(lambda gl: any(g in gl for g in genres))
+            filtered["genres"].apply(
+                lambda gl: any(
+                    any(genre in genre_map[g] for genre in genres) for g in gl
+                )
+            )
         ]
     if selected_months:
 
@@ -105,7 +119,9 @@ if submitted:
             if "distance_km" in row:
                 st.markdown(f"**Entfernung:** {row['distance_km']:.1f} km")
             genres_formatted = [
-                genre if genre not in genres else f"**{genre}**"
+                genre
+                if not any(g in genre_map[genre] for g in genres)
+                else f"**{genre}**"
                 for genre in row["genres"]
             ]
             st.markdown(f"**Genres:** {', '.join(genres_formatted)}")
