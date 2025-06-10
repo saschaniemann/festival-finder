@@ -9,11 +9,17 @@ from datetime import datetime
 from typing import List, Tuple, Any
 from geopy.distance import geodesic
 import pydeck as pdk
-from geopy.geocoders import Nominatim
 from utils import get_lat_long
+from dotenv import load_dotenv
 
 st.set_page_config(page_title="Festival finder", page_icon="favicon.png")
 st.title("Festival Finder")
+
+
+@st.cache_resource(ttl="1h", show_spinner=False)
+def load_env():
+    """Load environment variables from .env file."""
+    load_dotenv()
 
 
 # Load JSON data
