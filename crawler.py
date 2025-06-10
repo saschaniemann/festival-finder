@@ -672,7 +672,7 @@ def clean_up_genres(events: List[dict], data_dir: str) -> None:
         + ", ".join(all_genres)
         + "]. Return the dictionary as a JSON string."
     )
-    response = gemini_generate(prompt, model="gemini-2.5-flash")
+    response = gemini_generate(prompt, model="gemini-2.5-flash-preview-05-20")
     try:
         cleaned_up_genres = json.loads(response)
     except json.JSONDecodeError as e:
