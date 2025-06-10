@@ -655,29 +655,46 @@ def clean_up_genres(events: List[dict], data_dir: str) -> None:
         data_dir (str): path of data directory
 
     """
+
+    def get_missing_genres(genres: set, cleaned_up_genres: dict) -> set:
+        """Get genres that are not in the cleaned up genres."""
+        return {genre for genre in genres if genre not in cleaned_up_genres}
+
     all_genres = set()
     for event in events:
         if "genres" in event and isinstance(event["genres"], list):
             all_genres.update(event["genres"])
 
-    prompt = (
-        """You are a music genre expert. 
-    Please return a dictionary that maps each genre to a broader genre. 
-    For example, if the input is ['Afrobeat', 'Afrobeats', 'Afro'], the output should be 
-    {'Afrobeat': 'Afrobeats', 'Afrobeats': 'Afrobeats', 'Afro': 'Afrobeats'}. For ['Hard Rock', 'Death Metal', 'Heavy Metal'],
-    the output should be {'Hard Rock': 'Rock', 'Death Metal': 'Metal', 'Heavy Metal': 'Metal'}.
-    If a genre does not have a broader genre, map it to itself. Make sure every original genre exists as a key
-    of that dict.
-    The input genres are: ["""
-        + ", ".join(all_genres)
-        + "]. Return the dictionary as a JSON string."
-    )
-    response = gemini_generate(prompt, model="gemini-2.5-flash-preview-05-20")
-    try:
-        cleaned_up_genres = json.loads(response)
-    except json.JSONDecodeError as e:
-        print(f"Error decoding JSON response: {e}")
-        cleaned_up_genres = {}
+    cleaned_up_genres = dict()
+    while missing := get_missing_genres(all_genres, cleaned_up_genres):
+        prompt = (
+            """You are a music genre expert. 
+        Please return a dictionary that maps each genre to a broader genre. 
+        For example, if the input is ['Afrobeat', 'Afrobeats', 'Afro'], the output should be 
+        {'Afrobeat': 'Afrobeats', 'Afrobeats': 'Afrobeats', 'Afro': 'Afrobeats'}. For ['Hard Rock', 'Death Metal', 'Heavy Metal'],
+        the output should be {'Hard Rock': 'Rock', 'Death Metal': 'Metal', 'Heavy Metal': 'Metal'}.
+        If a genre does not have a broader genre, map it to itself. Make sure every original genre exists as a key
+        of that dict even if it is misspelled, e.g. 'Reagge' should be mapped to 'Reggae'.
+        """
+            + f"""The missing genres are: ['{"', '".join(missing)}']. Return the dictionary as a JSON string.
+        """
+        )
+        prompt += (
+            """The following dictionary has already been built. Simply add the missing genres mentioned above and return the combined dictionary:
+        {
+            """
+            + ", ".join([f"'{key}': '{value}'" for key, value in clean_up_genres])
+            + """
+        }
+        """
+        )
+        response = gemini_generate(prompt, model="gemini-2.5-flash-preview-05-20")
+        try:
+            cleaned_up_genres = json.loads(response)
+        except json.JSONDecodeError as e:
+            print(f"Error decoding JSON response: {e}")
+            cleaned_up_genres = {}
+
     with open(f"{data_dir}/cleaned_up_genres.json", "w") as f:
         json.dump(cleaned_up_genres, f, indent=4)
 
