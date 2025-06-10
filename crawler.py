@@ -193,18 +193,19 @@ async def run_parallel_fetch(
     return results_in_completion_order
 
 
-def gemini_generate(prompt: str) -> str:
+def gemini_generate(prompt: str, model: str = "gemini-2.0-flash-lite") -> str:
     """Run Gemini API using the passed prompt.
 
     Args:
         prompt (str): prompt to pass to Gemini API
+        model (str): model to use of Gemini API
 
     Returns:
         str: response. Since structured output is used, this contains json as a string.
 
     """
     genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-    model = genai.GenerativeModel("gemini-2.0-flash-lite")
+    model = genai.GenerativeModel(model)
 
     def safe_generate():
         return model.generate_content(
@@ -671,7 +672,7 @@ def clean_up_genres(events: List[dict], data_dir: str) -> None:
         + ", ".join(all_genres)
         + "]. Return the dictionary as a JSON string."
     )
-    response = gemini_generate(prompt)
+    response = gemini_generate(prompt, model="gemini-2.5-flash")
     try:
         cleaned_up_genres = json.loads(response)
     except json.JSONDecodeError as e:
