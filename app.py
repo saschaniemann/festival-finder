@@ -1,6 +1,7 @@
 """Steamlit app to search festivals from a previously crawled list of festivals."""
 
 import math
+from types import SimpleNamespace
 import streamlit as st
 import pandas as pd
 import json
@@ -9,6 +10,7 @@ from typing import List, Tuple, Any
 from geopy.distance import geodesic
 import pydeck as pdk
 from geopy.geocoders import Nominatim
+from utils import get_lat_long
 
 st.set_page_config(page_title="Festival finder", page_icon="favicon.png")
 st.title("Festival Finder")
@@ -73,8 +75,12 @@ def filter_data(
 
     if location_input:
         try:
-            geolocator = Nominatim(user_agent="festival_app")
-            loc = geolocator.geocode(location_input)
+            # geolocator = Nominatim(user_agent="festival_app")
+            # loc = geolocator.geocode(location_input)
+            latitude, longitude = get_lat_long(location_input)
+            if latitude is None or longitude is None:
+                raise ValueError("Invalid location input")
+            loc = SimpleNamespace(latitude=latitude, longitude=longitude)
             user_point = (loc.latitude, loc.longitude)
             # filter by distance
             filtered["distance_km"] = filtered.apply(
@@ -83,8 +89,9 @@ def filter_data(
             filtered = filtered[filtered["distance_km"] <= max_distance]
             return filtered, loc
         except Exception as e:
+            print(f"Error processing location input '{location_input}': {e}")
             st.error(
-                f"Ort '{e}' konnte nicht gefunden werden. Bitte überprüfen Sie die Eingabe."
+                f"Ort '{location_input}' konnte nicht gefunden werden. Bitte überprüfen Sie die Eingabe."
             )
     return filtered, None
 
@@ -196,6 +203,7 @@ def display_results(data: pd.DataFrame, genres: List[str], bands: List[str]):
         else:
             date_str = f"{row['start_date'].strftime('%d.%m.%Y')} - {row['end_date'].strftime('%d.%m.%Y')}"
         st.markdown(f"**Datum:** {date_str}")
+        st.markdown(f"**Ort:** {row['location']['city']}, {row['location']['country']}")
         if "distance_km" in row:
             st.markdown(f"**Entfernung:** {row['distance_km']:.1f} km")
         genres_formatted = [
