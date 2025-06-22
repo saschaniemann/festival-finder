@@ -232,11 +232,6 @@ load_env()
 data = load_data()
 genre_map = load_genre_map()
 
-import os
-
-st.write("Mapbox token is:", os.getenv("MAPBOX_API_KEY"))
-
-
 # Preprocessing
 data["start_date"] = pd.to_datetime(data["start_date"], format="%d.%m.%Y")
 data["end_date"] = pd.to_datetime(data["end_date"], format="%d.%m.%Y")
