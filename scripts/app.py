@@ -181,7 +181,7 @@ def display_map(data: pd.DataFrame, loc: Any) -> None:
 
     st.pydeck_chart(
         pdk.Deck(
-            map_style="mapbox://styles/mapbox/light-v9",
+            map_style="light",
             initial_view_state=pdk.ViewState(
                 latitude=loc.latitude, longitude=loc.longitude, zoom=5, pitch=0
             ),
@@ -231,6 +231,11 @@ def display_results(data: pd.DataFrame, genres: List[str], bands: List[str]):
 load_env()
 data = load_data()
 genre_map = load_genre_map()
+
+import os
+
+st.write("Mapbox token is:", os.getenv("MAPBOX_API_KEY"))
+
 
 # Preprocessing
 data["start_date"] = pd.to_datetime(data["start_date"], format="%d.%m.%Y")
