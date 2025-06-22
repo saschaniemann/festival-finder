@@ -13,12 +13,12 @@ NEW_TITLE = """
     <meta property="og:url" content="https://saschaniemann.com/festival-finder/">
     <meta property="og:title" content="Festival Finder">
     <meta property="og:description" content="Festival Finder is a Streamlit app that helps you find music festivals based on your preferences.">
-    <meta property="og:image" content="https://saschaniemann.com/festival-finder/app/static/og_image.png">
+    <meta property="og:image:secure_url" content="https://saschaniemann.com/festival-finder/app/static/og_image.jpg">
     <meta property="twitter:card" content="Festival Finder is a Streamlit app that helps you find music festivals based on your preferences.">
     <meta property="twitter:url" content="https://saschaniemann.com/festival-finder/">
     <meta property="twitter:title" content="Festival Finder">
     <meta property="twitter:description" content="Festival Finder is a Streamlit app that helps you find music festivals based on your preferences.">
-    <meta property="twitter:image" content="https://saschaniemann.com/festival-finder/app/static/og_image.png">
+    <meta property="twitter:image" content="https://saschaniemann.com/festival-finder/app/static/og_image.jpg">
 """
 
 STREAMLIT_INDEX = "/usr/local/lib/python3.13/site-packages/streamlit/static/index.html"
