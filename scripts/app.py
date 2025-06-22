@@ -29,6 +29,7 @@ def load_data(path="data/events.json"):
     return pd.read_json(path)
 
 
+@st.cache_data
 def load_genre_map(path="data/cleaned_up_genres.json"):
     """Load genre map from json."""
     with open(path, "r") as f:
