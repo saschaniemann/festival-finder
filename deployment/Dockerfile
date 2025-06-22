@@ -9,7 +9,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY scripts/ ./scripts/
 COPY assets/favicon.png ./assets/favicon.png
-COPY static/og_image.png ./scripts/static/og_image.png
+COPY static/og_image.jpg ./scripts/static/og_image.jpg
 
 # needed for open graph tags
 RUN python3.13 scripts/set_meta_tags.py
