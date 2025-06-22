@@ -24,12 +24,12 @@ def load_env():
 
 # Load JSON data
 @st.cache_data
-def load_data(path="events.json"):
+def load_data(path="data/events.json"):
     """Load data from json."""
     return pd.read_json(path)
 
 
-def load_genre_map(path="cleaned_up_genres.json"):
+def load_genre_map(path="data/cleaned_up_genres.json"):
     """Load genre map from json."""
     with open(path, "r") as f:
         return json.load(f)

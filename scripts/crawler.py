@@ -738,7 +738,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--data-dir",
         type=Path,
-        default=Path("steps"),
+        default=Path("data"),
         help="Directory to store JSON step files",
     )
 
