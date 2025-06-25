@@ -1,6 +1,6 @@
 # Festival Finder
 
-[Festival Finder](https://saschaniemann.com/festival-finder) is a web application designed to help users discover music festivals around the world. Whether you're a fan of rock, pop, electronic, or indie music, this app makes it easy to find festivals that match your preferences.
+[Festival Finder](https://saschaniemann.com/festival-finder) is a web application designed to help users discover music festivals in Germany and the surrounding area. Whether you're a fan of rock, pop, electronic, or indie music, this app makes it easy to find festivals that match your preferences.
 
 ![Festival Finder Demo](assets/demo.gif)
 
