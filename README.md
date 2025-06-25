@@ -27,7 +27,25 @@
     ```
 
 ## Usage
+You can either use docker or run it natively:
+### Docker
+1. Build the Docker image:
+    ```bash
+    docker build -f deployment/Dockerfile -t festival-finder .
+    ```
+2. Run the crawler (this might take a couple of hours due to API limitations):
+    ```bash
+    docker run -v $(pwd)/data:/app/data festival-finder python scripts/crawler.py
+    ```
+3. Start the application:
+    ```bash
+    ./deployment/start_container.sh
+    ```
+4. Open the application in your browser at `http://localhost:8501`.
+5. Use the filters to search for festivals by location, genre, date, or bands.
+6. View festival details or explore the map for nearby events.
 
+### Native
 1. Run the crawler. This might take a couple of hours (mostly limited by Gemini's and Geoapify's API limitations of the free tier):
     ```bash
     python scripts/crawler.py

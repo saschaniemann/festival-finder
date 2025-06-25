@@ -12,7 +12,19 @@ import pydeck as pdk
 from utils import get_lat_long
 from dotenv import load_dotenv
 
-st.set_page_config(page_title="Festival finder", page_icon="assets/favicon.png")
+st.set_page_config(
+    page_title="Festival finder",
+    page_icon="assets/favicon.png",
+    menu_items={
+        "Report a bug": "https://github.com/saschaniemann",
+        "About": """
+    Festival Finder is a Streamlit app that helps you find music festivals based on your preferences.
+    It is a small project of my own and is not affiliated with any festival or organization.
+    The data is based on a previously crawled list of festivals and is not updated in real-time.
+    I get the data from various sources, including festival websites and [festivalticker](https://www.festivalticker.de/) as a starting point.
+    The code is open source and available on [GitHub](https://github.com/saschaniemann/festival-finder).""",
+    },
+)
 st.title("Festival Finder")
 
 
